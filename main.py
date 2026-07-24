@@ -171,13 +171,14 @@ async def process_rating(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(f"⭐ Спасибо! Оценка сегодняшнего дня (**{rating}/10**) успешно сохранена.", parse_mode="Markdown")
     await callback.answer()
 
-# Запуск бота
-async def main():
-    print("Бот запущен и ждет сообщения...")
-    await dp.start_polling(bot)
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        import traceback
+        print("КРИТИЧЕСКАЯ ОШИБКА:")
+        traceback.print_exc()
+        raise e
 
 
 
