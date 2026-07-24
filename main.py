@@ -171,6 +171,11 @@ async def process_rating(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(f"⭐ Спасибо! Оценка сегодняшнего дня (**{rating}/10**) успешно сохранена.", parse_mode="Markdown")
     await callback.answer()
 
+# Запуск бота
+async def main():
+    print("Бот запущен и ждет сообщения...")
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
     try:
         asyncio.run(main())
