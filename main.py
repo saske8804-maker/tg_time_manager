@@ -9,7 +9,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from datetime import datetime
 
 # Импортируем наш токен и функции базы данных из соседних файлов
-from config import TOKEN
+import os
+TOKEN = os.getenv("BOT_TOKEN")
 from database import init_db, add_task_to_db, get_tasks_for_day, save_daily_rating
 
 # Включаем логирование, чтобы видеть ошибки в терминале, если они будут
