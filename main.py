@@ -1,8 +1,6 @@
-TOKEN = os.getenv("BOT_TOKEN")
-print(f"ОТЛАДКА: Токен выглядит так -> {TOKEN}") # <--- Добавь эту строчку
+import os
 import asyncio
 import logging
-import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from aiogram import Bot, Dispatcher, F, types
@@ -34,6 +32,8 @@ threading.Thread(target=run_web_server, daemon=True).start()
 
 # --- ОСНОВНОЙ КОД БОТА ---
 TOKEN = os.getenv("BOT_TOKEN")
+print(f"ОТЛАДКА: Токен выглядит так -> {TOKEN}")
+
 from database import init_db, add_task_to_db, get_tasks_for_day, save_daily_rating
 
 logging.basicConfig(level=logging.INFO)
@@ -154,7 +154,7 @@ async def show_week_tasks(message: types.Message):
             has_tasks = True
             response += f"▫️ **{day}:**\n"
             for task_id, text in tasks:
-                response += f"   • {text}\n"
+                response += f"    • {text}\n"
             response += "\n"
 
     if not has_tasks:
