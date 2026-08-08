@@ -3,15 +3,8 @@ import asyncio
 import logging
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from datetime import datetime
 
-# --- ВЕБ-СЕРВЕР ДЛЯ RENDER (В ОТДЕЛЬНОМ ПОТОКЕ) ---
+# --- ВЕБ-СЕРВЕР ДОЛЖЕН СТАРТОВАТЬ МГНОВЕННО ---
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -19,17 +12,27 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"Bot is running!")
     def log_message(self, format, *args):
-        pass  # Отключаем лишние логи сервера
+        pass
 
-def run_web_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
-    print(f"Веб-сервер запущен на порту {port}")
-    server.serve_forever()
+port = int(os.environ.get("PORT", 10000))
+server = HTTPServer(("0.0.0.0", port), SimpleHandler)
 
-# Запускаем сервер в фоне до старта бота
-threading.Thread(target=run_web_server, daemon=True).start()
+# Запускаем сервер в фоновом потоке ДО любых импортов aiogram и базы
+threading.Thread(target=server.serve_forever, daemon=True).start()
+print(f"ОТЛАДКА: Веб-сервер мгновенно занял порт {port}")
 
+# --- ТЕПЕРЬ ОСТАЛЬНЫЕ ИМПОРТЫ И КОД ---
+TOKEN = os.getenv("BOT_TOKEN")
+print(f"ОТЛАДКА: Токен выглядит так -> {TOKEN}")
+
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from datetime import datetime
+from database import init_db, add_task_to_db, get_tasks_for_day, save_daily_rating
 # --- ОСНОВНОЙ КОД БОТА ---
 TOKEN = os.getenv("BOT_TOKEN")
 print(f"ОТЛАДКА: Токен выглядит так -> {TOKEN}")
