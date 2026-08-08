@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -9,7 +11,6 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from datetime import datetime
 
 # Импортируем наш токен и функции базы данных из соседних файлов
-import os
 TOKEN = os.getenv("BOT_TOKEN")
 from database import init_db, add_task_to_db, get_tasks_for_day, save_daily_rating
 
@@ -106,7 +107,6 @@ async def process_task_text(message: types.Message, state: FSMContext):
 # --- ПРОСМОТР ЗАДАЧ НА СЕГОДНЯ ---
 @dp.message(F.text == "📅 Посмотреть задачи на сегодня")
 async def show_today_tasks(message: types.Message):
-    # Узнаем сегодняшний день недели по-русски
     days_map = {
         0: "Понедельник", 1: "Вторник", 2: "Среда", 
         3: "Четверг", 4: "Пятница", 5: "Суббота", 6: "Воскресенье"
@@ -171,8 +171,20 @@ async def process_rating(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(f"⭐ Спасибо! Оценка сегодняшнего дня (**{rating}/10**) успешно сохранена.", parse_mode="Markdown")
     await callback.answer()
 
-# Запуск бота
+# --- ЗАПУСК ВЕБ-СЕРВЕРА И БОТА ---
 async def main():
+    # Запускаем легкий веб-сервер для Render, чтобы он поймал порт
+    app = web.Application()
+    app.router.add_get("/", lambda request: web.Response(text="Bot is running!"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Веб-сервер успешно запущен на порту {port}")
+
+    # Запускаем поллинг бота
     print("Бот запущен и ждет сообщения...")
     await dp.start_polling(bot)
 
@@ -184,8 +196,3 @@ if __name__ == "__main__":
         print("КРИТИЧЕСКАЯ ОШИБКА:")
         traceback.print_exc()
         raise e
-
-
-
-
-
