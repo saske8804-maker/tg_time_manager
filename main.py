@@ -1,3 +1,5 @@
+TOKEN = os.getenv("BOT_TOKEN")
+print(f"ОТЛАДКА: Токен выглядит так -> {TOKEN}") # <--- Добавь эту строчку
 import asyncio
 import logging
 import os
