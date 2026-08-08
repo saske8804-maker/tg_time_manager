@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import os
-from aiohttp import web
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -10,11 +11,29 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from datetime import datetime
 
-# Импортируем наш токен и функции базы данных из соседних файлов
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER (В ОТДЕЛЬНОМ ПОТОКЕ) ---
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    def log_message(self, format, *args):
+        pass  # Отключаем лишние логи сервера
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    print(f"Веб-сервер запущен на порту {port}")
+    server.serve_forever()
+
+# Запускаем сервер в фоне до старта бота
+threading.Thread(target=run_web_server, daemon=True).start()
+
+# --- ОСНОВНОЙ КОД БОТА ---
 TOKEN = os.getenv("BOT_TOKEN")
 from database import init_db, add_task_to_db, get_tasks_for_day, save_daily_rating
 
-# Включаем логирование, чтобы видеть ошибки в терминале, если они будут
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TOKEN)
@@ -24,7 +43,6 @@ dp = Dispatcher()
 init_db()
 
 # --- КЛАВИАТУРЫ ---
-# Главное меню
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📅 Посмотреть задачи на сегодня"), KeyboardButton(text="➕ Добавить задачу")],
@@ -33,7 +51,6 @@ main_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# Дни недели для добавления задач
 days_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Понедельник"), KeyboardButton(text="Вторник")],
@@ -44,24 +61,22 @@ days_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# --- МАШИНА СОСТОЯНИЙ (FSM) ДЛЯ ДОБАВЛЕНИЯ ЗАДАЧ ---
+# --- МАШИНА СОСТОЯНИЙ (FSM) ---
 class TaskState(StatesGroup):
     waiting_for_day = State()
     waiting_for_text = State()
 
-# --- МАШИНА СОСТОЯНИЙ ДЛЯ ОЦЕНКИ ДНЯ ---
 class RatingState(StatesGroup):
     waiting_for_rating = State()
 
-# Функция для клавиатуры с оценками от 1 до 10
 def get_rating_keyboard():
     builder = InlineKeyboardBuilder()
     for i in range(1, 11):
         builder.button(text=str(i), callback_data=f"rate_{i}")
-    builder.adjust(5) # По 5 кнопок в ряд
+    builder.adjust(5)
     return builder.as_markup()
 
-# --- ОБРАБОТЧИКИ КОМАНД И КНОПОК ---
+# --- ОБРАБОТЧИКИ ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -71,13 +86,11 @@ async def cmd_start(message: types.Message):
         reply_markup=main_menu
     )
 
-# Кнопка "Назад"
 @dp.message(F.text == "🔙 Назад")
 async def back_to_menu(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Главное меню:", reply_markup=main_menu)
 
-# --- ДОБАВЛЕНИЕ ЗАДАЧИ ---
 @dp.message(F.text == "➕ Добавить задачу")
 async def start_add_task(message: types.Message, state: FSMContext):
     await message.answer("На какой день недели добавить задачу?", reply_markup=days_menu)
@@ -98,13 +111,11 @@ async def process_task_text(message: types.Message, state: FSMContext):
     task_text = message.text
     user_id = message.from_user.id
 
-    # Сохраняем в базу данных
     add_task_to_db(user_id, day, task_text)
     
     await state.clear()
     await message.answer(f"✅ Задача успешно добавлена на **{day}**!", reply_markup=main_menu, parse_mode="Markdown")
 
-# --- ПРОСМОТР ЗАДАЧ НА СЕГОДНЯ ---
 @dp.message(F.text == "📅 Посмотреть задачи на сегодня")
 async def show_today_tasks(message: types.Message):
     days_map = {
@@ -127,7 +138,6 @@ async def show_today_tasks(message: types.Message):
 
     await message.answer(response, reply_markup=main_menu, parse_mode="Markdown")
 
-# --- ПРОСМОТР ВСЕХ ЗАДАЧ НА НЕДЕЛЮ ---
 @dp.message(F.text == "📋 Все задачи на неделю")
 async def show_week_tasks(message: types.Message):
     user_id = message.from_user.id
@@ -150,7 +160,6 @@ async def show_week_tasks(message: types.Message):
 
     await message.answer(response, reply_markup=main_menu, parse_mode="Markdown")
 
-# --- ОЦЕНКА ДНЯ ---
 @dp.message(F.text == "⭐ Оценить день")
 async def start_rating(message: types.Message, state: FSMContext):
     await message.answer(
@@ -171,20 +180,8 @@ async def process_rating(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(f"⭐ Спасибо! Оценка сегодняшнего дня (**{rating}/10**) успешно сохранена.", parse_mode="Markdown")
     await callback.answer()
 
-# --- ЗАПУСК ВЕБ-СЕРВЕРА И БОТА ---
+# --- ЗАПУСК БОТА ---
 async def main():
-    # Запускаем легкий веб-сервер для Render, чтобы он поймал порт
-    app = web.Application()
-    app.router.add_get("/", lambda request: web.Response(text="Bot is running!"))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    print(f"Веб-сервер успешно запущен на порту {port}")
-
-    # Запускаем поллинг бота
     print("Бот запущен и ждет сообщения...")
     await dp.start_polling(bot)
 
